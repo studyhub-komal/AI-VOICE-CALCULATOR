@@ -1,0 +1,191 @@
+import tkinter as tk
+import speech_recognition as r_module
+import threading
+import re
+import win32com.client
+import pythoncom
+
+
+def speak(text):
+    def run():
+        try:
+            pythoncom.CoInitialize()
+            speaker = win32com.client.Dispatch("SAPI.SpVoice")
+            speaker.Speak(text)
+            pythoncom.CoUninitialize()
+        except Exception:
+            pass
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def evaluate_expression(text):
+    text = text.lower().strip()
+
+    text = text.replace("plus", "+").replace("add", "+")
+    text = text.replace("minus", "-").replace("subtract", "-")
+
+    numbers = re.findall(r'\d+', text)
+    if len(numbers) == 2:
+        if "multiply" in text or "times" in text or "into" in text or "x" in text:
+            return str(int(numbers[0]) * int(numbers[1]))
+        elif "divide" in text or "divided" in text:
+            try:
+                res = int(numbers[0]) / int(numbers[1])
+                if res.is_integer():
+                    return str(int(res))
+                return str(round(res, 2))
+            except ZeroDivisionError:
+                return "Cannot divide by 0"
+
+    text = text.replace("multiply", "").replace("times", "").replace("into", "").replace("x", "")
+    text = text.replace("divided by", "/").replace("divide", "/")
+
+    allowed = "0123456789+-*/. "
+    clean_text = "".join([c for c in text if c in allowed])
+
+    try:
+        if clean_text.strip():
+            result = eval(clean_text)
+            if isinstance(result, float) and result.is_integer():
+                return str(int(result))
+            return str(result)
+        return "Invalid Input"
+    except:
+        return "Error"
+
+
+def voice_logic():
+    status_label.config(text="Listening...", fg="#FFCC00")
+    root.update()
+    speak("I am listening")
+
+    recognizer = r_module.Recognizer()
+    recognizer.dynamic_energy_threshold = False
+    recognizer.energy_threshold = 150
+
+    mic_index = None
+    try:
+        for index, name in enumerate(r_module.Microphone.list_microphone_names()):
+            if "microphone" in name.lower() or "realtek" in name.lower() or "internal" in name.lower():
+                mic_index = index
+                break
+    except:
+        mic_index = None
+
+    try:
+        with r_module.Microphone(device_index=mic_index) as source:
+            recognizer.adjust_for_ambient_noise(source, duration=0.5)
+
+            try:
+                audio = recognizer.listen(source, timeout=4, phrase_time_limit=5)
+                status_label.config(text="Processing...", fg="#00CCFF")
+                root.update()
+
+                query = recognizer.recognize_google(audio)
+                input_label.config(text=query)
+
+                result = evaluate_expression(query)
+                answer_label.config(text=result)
+
+                speak("Answer is " + result)
+                status_label.config(text="Done!", fg="#00FF00")
+
+            except r_module.WaitTimeoutError:
+                status_label.config(text="No speech detected (Timeout)", fg="#FF3333")
+                speak("No speech detected")
+
+            except r_module.UnknownValueError:
+                status_label.config(text="Could not understand", fg="#FF3333")
+                speak("Sorry, I could not understand")
+
+            except Exception:
+                status_label.config(text="Error, try again", fg="#FF3333")
+                speak("Error, please try again")
+
+    except Exception:
+        status_label.config(text="Mic Error, try again", fg="#FF3333")
+        speak("Microphone error, please try again")
+
+
+def start_listening():
+    threading.Thread(target=voice_logic, daemon=True).start()
+
+
+root = tk.Tk()
+root.title("AI Voice Calculator")
+root.geometry("400x550")
+root.configure(bg="#2b323c")
+
+tk.Label(
+    root,
+    text="AI VOICE CALCULATOR",
+    font=("Arial", 18, "bold"),
+    bg="#2b323c",
+    fg="#61afef"
+).pack(pady=20)
+
+tk.Label(
+    root,
+    text="Speak clearly (Example: 12 minus 5)",
+    font=("Arial", 11, "italic"),
+    bg="#2b323c",
+    fg="#abb2bf"
+).pack()
+
+tk.Label(
+    root,
+    text="Your Input",
+    font=("Arial", 14),
+    bg="#2b323c",
+    fg="#abb2bf"
+).pack(pady=(30, 5))
+
+input_label = tk.Label(
+    root,
+    text="---",
+    font=("Arial", 16, "bold"),
+    bg="#2b323c",
+    fg="#ffffff"
+)
+input_label.pack()
+
+status_label = tk.Label(
+    root,
+    text="Click to Speak",
+    font=("Arial", 12),
+    bg="#2b323c",
+    fg="#abb2bf"
+)
+status_label.pack(pady=10)
+
+tk.Label(
+    root,
+    text="Answer",
+    font=("Arial", 14),
+    bg="#2b323c",
+    fg="#abb2bf"
+).pack(pady=(20, 5))
+
+answer_label = tk.Label(
+    root,
+    text="0",
+    font=("Arial", 28, "bold"),
+    bg="#2b323c",
+    fg="#98c379"
+)
+answer_label.pack()
+
+btn = tk.Button(
+    root,
+    text="TAP TO SPEAK",
+    font=("Arial", 12, "bold"),
+    bg="#61afef",
+    fg="#2b323c",
+    command=start_listening,
+    width=20,
+    height=2
+)
+btn.pack(side="bottom", pady=40)
+
+root.mainloop()
