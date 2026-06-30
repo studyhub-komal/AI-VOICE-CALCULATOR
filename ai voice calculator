@@ -186,6 +186,6 @@ btn = tk.Button(
     width=20,
     height=2
 )
-btn.pack(side="bottom", pady=40)
+btn.pack(side="bottom", pady=30)
 
 root.mainloop()
